@@ -1,4 +1,4 @@
-#![deny(missing_docs)]
+#![warn(missing_docs)]
 
 //! Event listening, bubbling, and callbacks.
 //!
@@ -80,15 +80,92 @@
 //! total. To reiterate, this is using an entity hierarchy similar to the most complex websites I
 //! could find.
 
-pub use bevy_eventlistener_core::*;
 pub use bevy_eventlistener_derive::EntityEvent;
+pub use plugin::*;
 
 /// Common exports
 pub mod prelude {
-    pub use bevy_eventlistener_core::{
-        callbacks::{Listener, ListenerInput, ListenerMut},
-        event_listener::{EntityEvent, On},
-        EventListenerPlugin,
-    };
+    pub use crate::callbacks::{Listener, ListenerInput, ListenerMut};
+    pub use crate::event_listener::{EntityEvent, On};
+    pub use crate::EventListenerPlugin;
     pub use bevy_eventlistener_derive::EntityEvent;
+}
+
+use event_listener::EntityEvent;
+
+pub mod callbacks;
+pub mod event_dispatcher;
+pub mod event_listener;
+pub mod plugin;
+
+#[test]
+fn replace_listener() {
+    use crate::prelude::*;
+    use bevy::prelude::*;
+
+    #[derive(Clone, Event, EntityEvent)]
+    struct Foo {
+        #[target]
+        target: Entity,
+    }
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    let mut app = App::new();
+    let entity = app.world_mut().spawn_empty().id();
+    app.add_plugins(MinimalPlugins)
+        .add_plugins(EventListenerPlugin::<Foo>::default())
+        .add_systems(Update, move |mut event: EventWriter<Foo>| {
+            event.send(Foo { target: entity });
+        })
+        .update();
+
+    let sender = tx.clone();
+    let callback = On::<Foo>::run(move || sender.send("one").unwrap());
+    app.world_mut().entity_mut(entity).insert(callback);
+    app.update();
+
+    let sender = tx.clone();
+    let callback = On::<Foo>::run(move || sender.send("two").unwrap());
+    app.world_mut().entity_mut(entity).insert(callback);
+    app.update();
+
+    assert_eq!(rx.recv(), Ok("one"));
+    assert_eq!(rx.recv(), Ok("two"));
+}
+
+#[test]
+fn replace_listener_in_callback() {
+    use crate::prelude::*;
+    use bevy::ecs::system::EntityCommands;
+    use bevy::prelude::*;
+
+    #[derive(Clone, Event, EntityEvent)]
+    struct Foo {
+        #[target]
+        target: Entity,
+    }
+
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let mut app = App::new();
+    let entity = app.world_mut().spawn_empty().id();
+    app.add_plugins(MinimalPlugins)
+        .add_plugins(EventListenerPlugin::<Foo>::default())
+        .add_systems(Update, move |mut event: EventWriter<Foo>| {
+            event.send(Foo { target: entity });
+        })
+        .update();
+
+    let callback = On::<Foo>::listener_commands_mut(
+        move |_: &mut ListenerInput<Foo>, commands: &mut EntityCommands| {
+            sender.send("one").unwrap();
+            let sender2 = sender.clone();
+            commands.insert(On::<Foo>::run(move || sender2.send("two").unwrap()));
+        },
+    );
+    app.world_mut().entity_mut(entity).insert(callback);
+    app.update();
+    app.update();
+
+    assert_eq!(receiver.recv(), Ok("one"));
+    assert_eq!(receiver.recv(), Ok("two"));
 }

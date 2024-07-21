@@ -1,3 +1,6 @@
+//! Provides the [`EventDispatcher`], which handles bubbling events through the entity hierarchy,
+//! and triggering event listeners.
+
 use bevy_ecs::prelude::*;
 use bevy_hierarchy::Parent;
 use bevy_utils::{HashMap, HashSet};
@@ -50,7 +53,7 @@ impl<E: EntityEvent> EventDispatcher<E> {
         dead_branch_nodes.clear();
         target_cache.clear();
 
-        for event in events.iter() {
+        for event in events.read() {
             // if the target belongs to a dead branch, exit early.
             if dead_branch_nodes.contains(&event.target()) {
                 continue;
@@ -75,7 +78,10 @@ impl<E: EntityEvent> EventDispatcher<E> {
     pub fn cleanup(mut listeners: Query<&mut On<E>>, mut callbacks: ResMut<EventDispatcher<E>>) {
         for (entity, (callback, _)) in callbacks.listener_graph.drain() {
             if let Ok(mut listener) = listeners.get_mut(entity) {
-                listener.callback = callback;
+                // Do not restore the callback if it has been replaced by the event handler.
+                if listener.callback.is_empty() {
+                    listener.callback = callback;
+                }
             }
         }
     }

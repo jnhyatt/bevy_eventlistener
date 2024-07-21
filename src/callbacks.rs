@@ -1,43 +1,50 @@
+//! Implementation of callbacks as one-shot bevy systems.
+
 use bevy_ecs::{prelude::*, system::BoxedSystem};
 
 use crate::EntityEvent;
 
+/// Holds a system, with its own state, that can be run on command from an event listener
+/// [`crate::prelude::On`].
 #[derive(Default, Debug)]
 pub enum CallbackSystem {
+    /// The system has been removed, because it is currently being executed in the callback graph
+    /// for event bubbling.
     #[default]
     Empty,
+    /// A system that has not yet been initialized.
     New(BoxedSystem),
+    /// A system that is ready to be executed.
     Initialized(BoxedSystem),
 }
 
 impl CallbackSystem {
-    pub(crate) fn is_initialized(&self) -> bool {
-        matches!(self, CallbackSystem::Initialized(_))
+    pub(crate) fn run(&mut self, world: &mut World) {
+        let mut system = match std::mem::take(self) {
+            CallbackSystem::Empty => return,
+            CallbackSystem::New(mut system) => {
+                system.initialize(world);
+                system
+            }
+            CallbackSystem::Initialized(system) => system,
+        };
+        system.run((), world);
+        system.apply_deferred(world);
+        *self = CallbackSystem::Initialized(system);
     }
 
-    pub(crate) fn run(&mut self, world: &mut World) {
-        if !self.is_initialized() {
-            let mut temp = CallbackSystem::Empty;
-            std::mem::swap(self, &mut temp);
-            if let CallbackSystem::New(mut system) = temp {
-                system.initialize(world);
-                *self = CallbackSystem::Initialized(system);
-            }
-        }
-        if let CallbackSystem::Initialized(system) = self {
-            system.run((), world);
-            system.apply_deferred(world);
-        }
+    pub(crate) fn is_empty(&self) -> bool {
+        matches!(self, CallbackSystem::Empty)
     }
 }
 
-/// A [`SystemParam`](bevy::ecs::system::SystemParam) used to get immutable access the the
+/// A [`SystemParam`](bevy_ecs::system::SystemParam) used to get immutable access the the
 /// [`ListenerInput`] for this callback.
 ///
 /// Use this in callback systems to access event data for the event that triggered the callback.
 pub type Listener<'w, E> = Res<'w, ListenerInput<E>>;
 
-/// A [`SystemParam`](bevy::ecs::system::SystemParam) used to get mutable access the the
+/// A [`SystemParam`](bevy_ecs::system::SystemParam) used to get mutable access the the
 /// [`ListenerInput`] for this callback.
 ///
 /// Use this in callback systems to access event data for the event that triggered the callback.
@@ -50,7 +57,7 @@ pub type ListenerMut<'w, E> = ResMut<'w, ListenerInput<E>>;
 /// callback systems.
 ///
 /// ```
-/// # use bevy_eventlistener_core::{callbacks::ListenerMut, event_listener::EntityEvent};
+/// # use bevy_eventlistener::prelude::{ListenerMut, EntityEvent};
 /// # use bevy_ecs::prelude::*;
 /// # #[derive(Clone, Event)]
 /// # struct MyEvent {

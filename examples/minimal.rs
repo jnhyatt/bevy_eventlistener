@@ -26,6 +26,7 @@ fn main() {
 
 /// An event used with event listeners must implement `EntityEvent` and `Clone`.
 #[derive(Clone, Event, EntityEvent)]
+#[can_bubble] // Enables event bubbling for this event, off by default
 struct Attack {
     #[target] // Marks the field of the event that specifies the target entity
     target: Entity,
@@ -113,6 +114,6 @@ fn take_damage(
     } else {
         warn!("💀 {} has died a gruesome death", name);
         commands.entity(attack.listener()).despawn_recursive();
-        app_exit.send(bevy::app::AppExit);
+        app_exit.send(bevy::app::AppExit::Success);
     }
 }

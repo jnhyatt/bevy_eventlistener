@@ -34,6 +34,7 @@ fn some_simple_system(time: Res<Time>) {
 
 /// An event used with event listeners must implement `EntityEvent` and `Clone`.
 #[derive(Clone, Event, EntityEvent)]
+#[can_bubble]
 struct MyEvent<const N: usize> {
     #[target] // Marks the field of the event that specifies the target entity
     target: Entity,
@@ -70,7 +71,7 @@ fn setup(mut commands: Commands, mut target_entity: ResMut<TargetEntity>) {
                         captured_data
                     );
                     info!(
-                        "I can also use queries and resources because I am a system. Time: {:?}",
+                        "I can also use queries and resources because I am a system. My name is: {:?}",
                         names.get(event.target)
                     );
                     // If you are working in a hierarchy and want to stop this event from bubbling
@@ -137,7 +138,7 @@ impl From<ListenerInput<MyEvent<7>>> for DoSomethingComplex {
 /// Unlike the [`some_simple_system`], this one can run in parallel with other systems because it is
 /// scheduled.
 fn some_complex_system(mut events: EventReader<DoSomethingComplex>) {
-    for event in events.iter() {
+    for event in events.read() {
         info!("Doing complex things with data: {}", event.important_data)
     }
 }
@@ -159,39 +160,53 @@ fn keyboard_events(
 ) {
     let target = target.0;
     for input in inputs
-        .iter()
+        .read()
         .filter(|input| !input.state.is_pressed())
-        .filter_map(|input| input.key_code)
+        .map(|input| input.key_code)
     {
         match input {
-            KeyCode::Key1 => ev1.send(MyEvent {
-                target,
-                message: "Key 1".into(),
-            }),
-            KeyCode::Key2 => ev2.send(MyEvent {
-                target,
-                message: "Key 2".into(),
-            }),
-            KeyCode::Key3 => ev3.send(MyEvent {
-                target,
-                message: "Key 3".into(),
-            }),
-            KeyCode::Key4 => ev4.send(MyEvent {
-                target,
-                message: "Key 4".into(),
-            }),
-            KeyCode::Key5 => ev5.send(MyEvent {
-                target,
-                message: "Key 5".into(),
-            }),
-            KeyCode::Key6 => ev6.send(MyEvent {
-                target,
-                message: "Key 6".into(),
-            }),
-            KeyCode::Key7 => ev7.send(MyEvent {
-                target,
-                message: "Key 7".into(),
-            }),
+            KeyCode::Digit1 => {
+                ev1.send(MyEvent {
+                    target,
+                    message: "Key 1".into(),
+                });
+            }
+            KeyCode::Digit2 => {
+                ev2.send(MyEvent {
+                    target,
+                    message: "Key 2".into(),
+                });
+            }
+            KeyCode::Digit3 => {
+                ev3.send(MyEvent {
+                    target,
+                    message: "Key 3".into(),
+                });
+            }
+            KeyCode::Digit4 => {
+                ev4.send(MyEvent {
+                    target,
+                    message: "Key 4".into(),
+                });
+            }
+            KeyCode::Digit5 => {
+                ev5.send(MyEvent {
+                    target,
+                    message: "Key 5".into(),
+                });
+            }
+            KeyCode::Digit6 => {
+                ev6.send(MyEvent {
+                    target,
+                    message: "Key 6".into(),
+                });
+            }
+            KeyCode::Digit7 => {
+                ev7.send(MyEvent {
+                    target,
+                    message: "Key 7".into(),
+                });
+            }
             _ => (),
         }
     }
